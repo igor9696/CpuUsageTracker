@@ -1,5 +1,5 @@
 add_subdirectory(Reader)
-
+add_subdirectory(Analyzer)
 
 add_executable(${PROJECT_NAME} main.c)
 target_link_options(${PROJECT_NAME} PUBLIC -pthread)
@@ -16,3 +16,5 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC READER_LIB)
+target_link_libraries(${PROJECT_NAME} PUBLIC ANALYZER_LIB)
+
