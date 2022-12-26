@@ -1,5 +1,6 @@
 add_subdirectory(Reader)
 add_subdirectory(Analyzer)
+add_subdirectory(Queue)
 
 add_executable(${PROJECT_NAME} main.c)
 target_link_options(${PROJECT_NAME} PUBLIC -pthread)

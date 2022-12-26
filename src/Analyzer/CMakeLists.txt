@@ -1,0 +1,1 @@
+add_library(ANALYZER_LIB Analyzer.c)
