@@ -4,6 +4,19 @@ extern "C" {
 #include <gtest/gtest.h>
 
 
+// class QueueTest : public ::testing::Test {
+// protected:
+//     void SetUp() override {
+//         queue = CreateQueue(10, sizeof(int));
+//     }
+
+//     void TearDown() override {
+//         DestroyQueue(&queue);
+//     }
+
+//     QueueHandle_t *queue;
+// };
+
 TEST(QueueTest, CreateQueueAndGetValidPointers)
 {
     /*Init*/
@@ -40,6 +53,21 @@ TEST(QueueTest, DestroyQueueAndGetNullPointers)
     DestroyQueue(&queue);
 
     /* Verify */
-    EXPECT_TRUE(queue->buffer == NULL);
     EXPECT_TRUE(queue == NULL);
 }
+
+TEST(QueueTest, SendElementToQueue)
+{
+    /*Init*/
+    QueueHandle_t *queue = NULL;
+    queue = CreateQueue(10, sizeof(int));
+    int val = 69;
+
+    /* Excercise */
+    QueueSend(&queue, (const void*)&val);
+    
+    /* Verify */
+    EXPECT_EQ(val, *(int*)(queue->buffer));
+}
+
+

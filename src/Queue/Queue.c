@@ -1,6 +1,8 @@
 #include "Queue.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <string.h>
 
 QueueHandle_t* CreateQueue(uint8_t QueueLength, size_t size_of_element)
 {
@@ -35,4 +37,9 @@ void DestroyQueue(QueueHandle_t** Queue)
 
     (*Queue)->buffer = NULL;
     *Queue = NULL;
+}
+
+void QueueSend(QueueHandle_t** queue, const void* ItemToQueue)
+{
+    memcpy((*queue)->buffer, ItemToQueue, (*queue)->_element_size);
 }

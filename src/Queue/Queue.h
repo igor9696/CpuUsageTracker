@@ -13,6 +13,7 @@ typedef struct QueueHandle_t
 
 QueueHandle_t* CreateQueue(uint8_t QueueLength, size_t size_of_element);
 void DestroyQueue(QueueHandle_t** Queue);
+void QueueSend(QueueHandle_t** queue, const void* ItemToQueue);
 
 
 #endif // QUEUE_H
