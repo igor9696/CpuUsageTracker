@@ -1,1 +1,1 @@
-add_library(QUEUE_LIB Queue.c)
+add_library(QUEUE_LIB SHARED Queue.c)

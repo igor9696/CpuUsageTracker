@@ -9,7 +9,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(QueueTest QueueTest.cpp)
-target_link_libraries(QueueTest GTest::gtest_main QUEUE_LIB)
+target_include_directories(QueueTest PRIVATE ../src)
+target_link_libraries(QueueTest QUEUE_LIB GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(QueueTest)
 
