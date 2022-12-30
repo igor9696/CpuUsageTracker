@@ -9,7 +9,7 @@
 #include "Reader/Reader.h"
 #include "Queue/Queue.h"
 
-#define DEBUG 1
+// #define DEBUG 1
 
 pthread_mutex_t mutexCpuTime;
 QueueHandle_t* cpuTimesQueue;
@@ -69,18 +69,46 @@ void* Reader(void* arg)
             break;
         }
         
-        // send data to queue
         if(QueueSend(&cpuTimesQueue, (const void*)&cpuTimesArr) == 1)
         {
             printf("Queue is full! Skipping adding new data\n");
         }
-        
+
         free(line_buff);
         sleep(1);
     }
 
     return arg;
 }
+
+void* Analyzer(void* arg)
+{
+    cpuTimes_s input_raw_data[MAX_NUMBER_OF_CORES] = { 0 };
+    for(;;)
+    {   
+        QueueBlockingReceive(&cpuTimesQueue, (void*)&input_raw_data);
+        for(int c = 0; c < MAX_NUMBER_OF_CORES; c++)
+        {
+            printf("[A]PROC: cpu=%u user=%llu nice=%llu system=%llu idle=%llu "
+                "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
+                c, input_raw_data[c].user, input_raw_data[c].nice, input_raw_data[c].system, input_raw_data[c].idle,
+                input_raw_data[c].iowait, input_raw_data[c].irq, input_raw_data[c].softirq, input_raw_data[c].steal, input_raw_data[c].guest);
+        }
+
+
+
+
+
+
+
+    }
+
+
+
+
+    return arg;
+}
+
 
 
 int main()
@@ -89,23 +117,41 @@ int main()
     pthread_mutex_init(&mutexCpuTime, NULL);
     cpuTimesQueue = CreateQueue(10, (sizeof(cpuTimes_s) * MAX_NUMBER_OF_CORES));
 
-    // Reader Task
-    if(pthread_create(&th[0], NULL, Reader, NULL) != 0)
+    for(int t = 0; t < 5; t++)
     {
-        printf("Pthread_create error!\n");
-        goto CleanUp;
+        if(t == 0)
+        {
+            if(pthread_create(&th[t], NULL, Reader, NULL) != 0)
+            {
+                printf("Pthread_create error!\n");
+                goto CleanUp;
+            }
+        }
+
+        else if(t == 1)
+        {
+            if(pthread_create(&th[t], NULL, Analyzer, NULL) != 0)
+            {
+                printf("Pthread_create error!\n");
+                goto CleanUp;
+            }
+        }
+
     }
 
-    if(pthread_join(th[0], NULL) != 0)
+    for(int t = 0; t < 5; t++)
     {
-        printf("Pthread_create error!\n");
-        return -1;
+        if(pthread_join(th[t], NULL) != 0)
+        {
+            printf("Pthread_create error!\n");
+            return -1;
+        }
     }
 
     pthread_mutex_destroy(&mutexCpuTime);
-    printf("Cpu Usage Tracker \n");
+    DestroyQueue(&cpuTimesQueue);
     return 0;
 
 CleanUp:
-    return -1;
+    return 1;
 }
