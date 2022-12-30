@@ -56,7 +56,7 @@ TEST(QueueTest, DestroyQueueAndGetNullPointers)
     EXPECT_TRUE(queue == NULL);
 }
 
-TEST(QueueTest, SendElementToQueue)
+TEST(QueueTest, SendElementToEmptyQueue)
 {
     /*Init*/
     QueueHandle_t *queue = NULL;
@@ -70,4 +70,81 @@ TEST(QueueTest, SendElementToQueue)
     EXPECT_EQ(val, *(int*)(queue->buffer));
 }
 
+TEST(QueueTest, SendElementToQueueAndGetBiggerQueueItemCounter)
+{
+    /*Init*/
+    QueueHandle_t *queue = CreateQueue(10, sizeof(int));
+    int some_val = 69;
 
+
+    /* Excercise */
+    EXPECT_EQ(0, GetNumOfItemsInsideQueue(&queue));
+    
+    QueueSend(&queue, (const void*)&some_val);
+    QueueSend(&queue, (const void*)&some_val);
+    
+    /* Verify */
+    EXPECT_EQ(2, GetNumOfItemsInsideQueue(&queue));
+}
+
+TEST(QueueTest, ReceiveElementFromQueueAndGetSmallerQueueItemCounter)
+{
+     /*Init*/
+    QueueHandle_t *queue = NULL;
+    queue = CreateQueue(10, sizeof(int));
+    int val = 69;
+    int ret = 0;
+
+    /* Prepare */
+    QueueSend(&queue, (const void*)&val);
+    EXPECT_EQ(1, GetNumOfItemsInsideQueue(&queue));
+
+    /* Excercise */
+    QueueBlockingReceive(&queue, (void*)&ret);
+    EXPECT_EQ(0, GetNumOfItemsInsideQueue(&queue));
+
+    /* Verify */
+    EXPECT_EQ(ret, val);
+}
+
+TEST(QueueTest, SendThreeElementsToQueueAndReceiveThemInProperOrder)
+{
+     /*Init*/
+    QueueHandle_t *queue = NULL;
+    queue = CreateQueue(10, sizeof(int));
+    int val1, val2, val3;
+    val1 = 10; val2 = 22; val3 = 44;
+    int ret = 0;
+
+    /* Prepare */
+    QueueSend(&queue, (const void*)&val1);
+    QueueSend(&queue, (const void*)&val2);
+    QueueSend(&queue, (const void*)&val3);
+
+    /* Excercise */
+    QueueBlockingReceive(&queue, (void*)&ret);
+    EXPECT_EQ(ret, val1);
+
+    QueueBlockingReceive(&queue, (void*)&ret);
+    EXPECT_EQ(ret, val2);
+
+    QueueBlockingReceive(&queue, (void*)&ret);
+    EXPECT_EQ(ret, val3);
+
+    EXPECT_EQ(0, GetNumOfItemsInsideQueue(&queue));
+}
+
+TEST(QueueTest, TryToSendElementToBusyQueueAndReturnWithErrorCode)
+{
+    /*Init*/
+    QueueHandle_t *queue = CreateQueue(3, sizeof(int));
+    int val = 100;
+    
+    /* Prepare */
+    QueueSend(&queue, )
+
+    /* Excercise */
+
+
+    int some_val = 69;
+}
