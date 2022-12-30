@@ -3,20 +3,6 @@ extern "C" {
 }
 #include <gtest/gtest.h>
 
-
-// class QueueTest : public ::testing::Test {
-// protected:
-//     void SetUp() override {
-//         queue = CreateQueue(10, sizeof(int));
-//     }
-
-//     void TearDown() override {
-//         DestroyQueue(&queue);
-//     }
-
-//     QueueHandle_t *queue;
-// };
-
 TEST(QueueTest, CreateQueueAndGetValidPointers)
 {
     /*Init*/
@@ -41,6 +27,9 @@ TEST(QueueTest, CreateQueueAndCheckIfInternalStruckVariablesAreCorrect)
     /* Verify */
     EXPECT_EQ(10, queue->_length);
     EXPECT_EQ(sizeof(int), queue->_element_size);
+    EXPECT_EQ(queue->_alloc_idx, 0);
+    EXPECT_EQ(queue->_free_idx, 0);
+    EXPECT_EQ(queue->_itemsInQueue, 0);
 }
 
 
@@ -139,12 +128,81 @@ TEST(QueueTest, TryToSendElementToBusyQueueAndReturnWithErrorCode)
     /*Init*/
     QueueHandle_t *queue = CreateQueue(3, sizeof(int));
     int val = 100;
-    
+    int ret = -1;
+
     /* Prepare */
-    QueueSend(&queue, )
-
-    /* Excercise */
-
-
-    int some_val = 69;
+    ret = QueueSend(&queue, (const void*)&val);
+    ret = QueueSend(&queue, (const void*)&val);
+    ret = QueueSend(&queue, (const void*)&val);
+    
+    EXPECT_EQ(0, ret);
+    
+    /* Verify */
+    ret = QueueSend(&queue, (const void*)&val);
+    EXPECT_EQ(1, ret);
 }
+
+TEST(QueueTest, FillOutQueue_ReceiveAllElements_FillItOutAgain)
+{
+    /*Init*/
+    QueueHandle_t *queue = CreateQueue(3, sizeof(int));
+    int val1 = 100;
+    int val2 = 200;
+    int val3 = 300;
+    int ret = -1;
+    int output = 0;
+
+    /* Prepare */
+    /* Fill out queue */
+    ret = QueueSend(&queue, (const void*)&val1);    
+    ret = QueueSend(&queue, (const void*)&val2);
+    ret = QueueSend(&queue, (const void*)&val3);
+
+    /* Receive all elements */
+    QueueBlockingReceive(&queue, (void*)&output);
+    QueueBlockingReceive(&queue, (void*)&output);
+    QueueBlockingReceive(&queue, (void*)&output);
+
+    /* Fill again */
+    ret = QueueSend(&queue, (const void*)&val1);    
+    ret = QueueSend(&queue, (const void*)&val2);
+    ret = QueueSend(&queue, (const void*)&val3);
+
+    QueueBlockingReceive(&queue, (void*)&output);
+    EXPECT_EQ(val1, output);
+    QueueBlockingReceive(&queue, (void*)&output);
+    EXPECT_EQ(val2, output);    
+    QueueBlockingReceive(&queue, (void*)&output);
+    EXPECT_EQ(val3, output);
+}
+
+
+TEST(QueueTest, PutStructureToQueueAndReceiveIt)
+{
+    /* Init */
+    struct Entity {
+        int val1;
+        float val2;
+        char val3;
+    };
+
+    struct Entity e = {
+        .val1 = 69,
+        .val2 = 33.5,
+        .val3 = 'C'
+    };
+
+    struct Entity ret = { 0 };
+    QueueHandle_t* queue = CreateQueue(4, sizeof(struct Entity));
+
+    /* Excersice */
+    QueueSend(&queue, (const void*)&e);
+    QueueBlockingReceive(&queue, (void*)&ret);
+
+    /* Verify */
+    EXPECT_EQ(e.val1, ret.val1);
+    EXPECT_EQ(e.val2, ret.val2);
+    EXPECT_EQ(e.val3, ret.val3);
+}
+
+
