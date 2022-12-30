@@ -18,4 +18,6 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PUBLIC READER_LIB)
 target_link_libraries(${PROJECT_NAME} PUBLIC ANALYZER_LIB)
+target_link_libraries(${PROJECT_NAME} PUBLIC QUEUE_LIB)
+
 

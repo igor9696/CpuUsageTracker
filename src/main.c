@@ -7,15 +7,18 @@
 #include <fcntl.h>
 
 #include "Reader/Reader.h"
+#include "Queue/Queue.h"
 
 #define DEBUG 1
 
-cpuTimes_s cpuTimesArr[MAX_NUMBER_OF_CORES] = {0};
 pthread_mutex_t mutexCpuTime;
+QueueHandle_t* cpuTimesQueue;
+
 
 void* Reader(void* arg)
 {
     FILE *file = NULL;
+    cpuTimes_s cpuTimesArr[MAX_NUMBER_OF_CORES] = {0};
     
     for(;;)
     {
@@ -29,7 +32,6 @@ void* Reader(void* arg)
             break;
         }
 
-        pthread_mutex_lock(&mutexCpuTime);
         while(getline(&line_buff, &line_len, file) != -1)
         {
             for(int core_idx = 0; core_idx < MAX_NUMBER_OF_CORES; core_idx++)
@@ -60,12 +62,17 @@ void* Reader(void* arg)
                 #endif
             }
         }
-        pthread_mutex_unlock(&mutexCpuTime);
 
         if(fclose(file) != 0)
         {
             printf("Error during fclose!\n");
             break;
+        }
+        
+        // send data to queue
+        if(QueueSend(&cpuTimesQueue, (const void*)&cpuTimesArr) == 1)
+        {
+            printf("Queue is full! Skipping adding new data\n");
         }
         
         free(line_buff);
@@ -80,6 +87,7 @@ int main()
 {
     pthread_t th[5];
     pthread_mutex_init(&mutexCpuTime, NULL);
+    cpuTimesQueue = CreateQueue(10, (sizeof(cpuTimes_s) * MAX_NUMBER_OF_CORES));
 
     // Reader Task
     if(pthread_create(&th[0], NULL, Reader, NULL) != 0)
