@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define MAX_NUMBER_OF_CORES 4
+#define MAX_NUMBER_OF_CORES 32
 
 typedef unsigned long long cputime_t;
 
