@@ -121,7 +121,7 @@ void* Analyzer(void* arg)
 
         /* Update previous cpuTimes and push CoreLoad to queue*/
         memcpy((void*)previousTimesData, (const void*)currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
-        if (QueueSend(&cpuPercentageQueue, (const void*)&CoreLoad) == 1)
+        if (QueueSend(&cpuPercentageQueue, (const void*)CoreLoad) == 1)
         {
             printf("cpuPercentageQueue is full! Skipping...\n");
         }
@@ -131,6 +131,28 @@ void* Analyzer(void* arg)
     free(previousTimesData);
     free(CoreLoad);
 
+    return arg;
+}
+
+void* Printer(void* arg)
+{
+    cpuLoad_s CoreLoad[systemNumberOfCores];
+    memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
+
+    for(;;)
+    {
+        // TODO: implement QueueReceive
+        QueueBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
+
+        printf("\rCPU core usage:");
+        for(int core = 0; core < systemNumberOfCores; core++)
+        {
+           printf("\tCORE %2u: %3u%%", CoreLoad[core].core, CoreLoad[core].coreLoadPercentage);
+        }
+        fflush(stdout);
+        
+        sleep(1);
+    }
     return arg;
 }
 
@@ -157,6 +179,15 @@ int main()
         else if(t == 1)
         {
             if(pthread_create(&th[t], NULL, Analyzer, NULL) != 0)
+            {
+                printf("Pthread_create error!\n");
+                goto CleanUp;
+            }
+        }
+
+        else if(t == 2)
+        {
+            if(pthread_create(&th[t], NULL, Printer, NULL) != 0)
             {
                 printf("Pthread_create error!\n");
                 goto CleanUp;
