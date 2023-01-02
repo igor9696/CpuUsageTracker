@@ -96,19 +96,15 @@ void* Reader(void* arg)
 
 void* Analyzer(void* arg)
 {
-    uint64_t Idle = 0, NonIdle = 0, Total = 0, totald = 0, idled = 0;
-    uint64_t PrevIdle = 0, PrevNonIdle = 0, PrevTotal = 0;
-    float CPU_Percentage = 0;
+    cpuTimes_s *currentTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
+    cpuTimes_s *previousTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
+    cpuLoad_s *CoreLoad = malloc(sizeof(cpuLoad_s) * systemNumberOfCores);
 
-    cpuTimes_s *input_raw_data = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-    cpuTimes_s *prev_raw_data = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-    cpuLoad_s *load = malloc(sizeof(cpuLoad_s) * systemNumberOfCores);
+    memset(currentTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    memset(previousTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    memset(CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
 
-    memset(input_raw_data, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    memset(prev_raw_data, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    memset(load, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
-
-    if(input_raw_data == NULL || prev_raw_data == NULL || load == NULL)
+    if(currentTimesData == NULL || previousTimesData == NULL || CoreLoad == NULL)
     {
         printf("Error during analyzer malloc!\n");
         return NULL;
@@ -116,53 +112,27 @@ void* Analyzer(void* arg)
 
     for(;;)
     {   
-        QueueBlockingReceive(&cpuTimesQueue, (void*)input_raw_data);
+        QueueBlockingReceive(&cpuTimesQueue, (void*)currentTimesData);
 
-        for(int c = 0; c < systemNumberOfCores; c++)
+        for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
         {
-            PrevIdle = prev_raw_data[c].idle + prev_raw_data[c].iowait;
-            Idle = input_raw_data[c].idle + input_raw_data[c].iowait;
-
-            PrevNonIdle = prev_raw_data[c].user + prev_raw_data[c].nice + prev_raw_data[c].system
-                        + prev_raw_data[c].irq + prev_raw_data[c].softirq + prev_raw_data[c].steal;
-
-            NonIdle = input_raw_data[c].user + input_raw_data[c].nice + input_raw_data[c].system  
-                    + input_raw_data[c].irq + input_raw_data[c].softirq + input_raw_data[c].steal;
-
-            PrevTotal = PrevIdle + PrevNonIdle;
-            Total = Idle + NonIdle;
-
-            totald = Total - PrevTotal;
-            idled = Idle - PrevIdle;
-
-            CPU_Percentage = ((float)(totald - idled) / totald) * 100;
-            load[c].core = c;
-            load[c].coreLoadPercentage = (uint8_t)CPU_Percentage;
-
-            #ifdef DEBUG
-            // printf("[A]PROC: cpu=%u user=%llu nice=%llu system=%llu idle=%llu "
-            //     "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
-            //     c, input_raw_data[c].user, input_raw_data[c].nice, input_raw_data[c].system, input_raw_data[c].idle,
-            //     input_raw_data[c].iowait, input_raw_data[c].irq, input_raw_data[c].softirq, input_raw_data[c].steal, input_raw_data[c].guest);
-            printf("CPU Percentage of core %d is %u\n", load[c].core, load[c].coreLoadPercentage);
-            #endif
+            CoreLoad[core_index] = CalculateCoreLoad(currentTimesData, previousTimesData, core_index);
         }
 
-        memcpy((void*)prev_raw_data, (const void*)input_raw_data, (sizeof(cpuTimes_s) * systemNumberOfCores));
-
-        if (QueueSend(&cpuPercentageQueue, (const void*)&load) == 1)
+        /* Update previous cpuTimes and push CoreLoad to queue*/
+        memcpy((void*)previousTimesData, (const void*)currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
+        if (QueueSend(&cpuPercentageQueue, (const void*)&CoreLoad) == 1)
         {
             printf("cpuPercentageQueue is full! Skipping...\n");
         }
     }
 
-    free(input_raw_data);
-    free(prev_raw_data);
-    free(load);
+    free(currentTimesData);
+    free(previousTimesData);
+    free(CoreLoad);
 
     return arg;
 }
-
 
 
 int main()
