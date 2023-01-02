@@ -12,6 +12,7 @@
 #include "Queue/Queue.h"
 
 #define DEBUG 1
+#define QUEUE_SIZE 10
 
 uint8_t systemNumberOfCores;
 pthread_mutex_t mutexCpuTime;
@@ -21,7 +22,6 @@ QueueHandle_t* cpuPercentageQueue;
 void* Reader(void* arg)
 {
     FILE *file = NULL;
-    // cpuTimes_s cpuTimesArr[MAX_NUMBER_OF_CORES] = {0};
     cpuTimes_s *cpuTimesArr = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
     memset(cpuTimesArr, 0, sizeof(cpuTimes_s) * systemNumberOfCores);
 
@@ -65,12 +65,11 @@ void* Reader(void* arg)
 
                 if ((cpu == core_idx) && (ret == 10))
                 {
-                    
                     cpuTimesArr[core_idx] = temp;
-                    printf("ReaderPROC: cpu=%u user=%llu nice=%llu system=%llu idle=%llu "
-                        "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
-                        cpu, cpuTimesArr[core_idx].user, cpuTimesArr[core_idx].nice, cpuTimesArr[core_idx].system, cpuTimesArr[core_idx].idle,
-                        cpuTimesArr[core_idx].iowait, cpuTimesArr[core_idx].irq, cpuTimesArr[core_idx].softirq, cpuTimesArr[core_idx].steal, cpuTimesArr[core_idx].guest);
+                    // printf("ReaderPROC: cpu=%u user=%llu nice=%llu system=%llu idle=%llu "
+                    //     "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
+                    //     cpu, cpuTimesArr[core_idx].user, cpuTimesArr[core_idx].nice, cpuTimesArr[core_idx].system, cpuTimesArr[core_idx].idle,
+                    //     cpuTimesArr[core_idx].iowait, cpuTimesArr[core_idx].irq, cpuTimesArr[core_idx].softirq, cpuTimesArr[core_idx].steal, cpuTimesArr[core_idx].guest);
                     break;
                 }
             }
@@ -97,8 +96,9 @@ void* Reader(void* arg)
 
 void* Analyzer(void* arg)
 {
-    // cpuTimes_s input_raw_data[MAX_NUMBER_OF_CORES] = { 0 };
-    // cpuTimes_s prev_raw_data[MAX_NUMBER_OF_CORES] = { 0 };
+    uint64_t Idle = 0, NonIdle = 0, Total = 0, totald = 0, idled = 0;
+    uint64_t PrevIdle = 0, PrevNonIdle = 0, PrevTotal = 0;
+    float CPU_Percentage = 0;
 
     cpuTimes_s *input_raw_data = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
     cpuTimes_s *prev_raw_data = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
@@ -113,12 +113,6 @@ void* Analyzer(void* arg)
         printf("Error during analyzer malloc!\n");
         return NULL;
     }
-
-    // cpuLoad_s load[MAX_NUMBER_OF_CORES] = { 0 };
-
-    uint64_t Idle = 0, NonIdle = 0, Total = 0, totald = 0, idled = 0;
-    uint64_t PrevIdle = 0, PrevNonIdle = 0, PrevTotal = 0;
-    float CPU_Percentage = 0;
 
     for(;;)
     {   
@@ -142,7 +136,6 @@ void* Analyzer(void* arg)
             idled = Idle - PrevIdle;
 
             CPU_Percentage = ((float)(totald - idled) / totald) * 100;
-            printf("CPU_Percentage: %f, core: %d\n", CPU_Percentage, c);
             load[c].core = c;
             load[c].coreLoadPercentage = (uint8_t)CPU_Percentage;
 
@@ -154,7 +147,8 @@ void* Analyzer(void* arg)
             printf("CPU Percentage of core %d is %u\n", load[c].core, load[c].coreLoadPercentage);
             #endif
         }
-        *prev_raw_data = *input_raw_data;
+
+        memcpy((void*)prev_raw_data, (const void*)input_raw_data, (sizeof(cpuTimes_s) * systemNumberOfCores));
 
         if (QueueSend(&cpuPercentageQueue, (const void*)&load) == 1)
         {
@@ -174,11 +168,10 @@ void* Analyzer(void* arg)
 int main()
 {
     systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
-
     pthread_t th[5];
     pthread_mutex_init(&mutexCpuTime, NULL);
-    cpuTimesQueue = CreateQueue(10, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    cpuPercentageQueue = CreateQueue(10, (sizeof(cpuLoad_s) * systemNumberOfCores));
+    cpuTimesQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    cpuPercentageQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
 
     for(int t = 0; t < 5; t++)
     {
