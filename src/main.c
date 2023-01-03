@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <signal.h>
 
 #include "Reader/Reader.h"
 #include "Analyzer/Analyzer.h"
@@ -15,10 +16,16 @@
 #define DEBUG 1
 #define QUEUE_SIZE 10
 
+/* Global variable declarations */
 uint8_t systemNumberOfCores;
 pthread_mutex_t mutexCpuTime;
 QueueHandle_t* cpuTimesQueue;
 QueueHandle_t* cpuPercentageQueue;
+pthread_cond_t SigTermFlag;
+volatile sig_atomic_t SIGTERM_FLAG = 0;
+
+/* Function declarations */
+void CleanUp_Handler(int signum);
 
 void* Reader(void* arg)
 {
@@ -91,6 +98,7 @@ void* Reader(void* arg)
         sleep(1);
     }
 
+CleanUp:
     free(cpuTimesArr);
     return arg;
 }
@@ -147,14 +155,7 @@ void* Printer(void* arg)
         {
             PrintFormattedCoreUsage(CoreLoad, systemNumberOfCores);
         }
-        // printf("\rCPU core usage:");
-        // for(int core = 0; core < systemNumberOfCores; core++)
-        // {
-        //    printf("\tCORE %2u: %3u%%", CoreLoad[core].core, CoreLoad[core].coreLoadPercentage);
-        // }
-        // fflush(stdout);
 
-        
         sleep(1);
     }
     return arg;
@@ -163,11 +164,18 @@ void* Printer(void* arg)
 
 int main()
 {
-    systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_t th[5];
+    systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_mutex_init(&mutexCpuTime, NULL);
+    pthread_cond_init(&SigTermFlag, NULL);
     cpuTimesQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
     cpuPercentageQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
+    
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = CleanUp_Handler;
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGINT, &action, NULL);
 
     for(int t = 0; t < 5; t++)
     {
@@ -216,4 +224,11 @@ int main()
 
 CleanUp:
     return 1;
+}
+
+
+void CleanUp_Handler(int signum)
+{
+    printf("Cleaning resources...\n");
+    SIGTERM_FLAG = 1;
 }
