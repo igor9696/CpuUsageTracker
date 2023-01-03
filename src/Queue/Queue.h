@@ -23,6 +23,7 @@ QueueHandle_t* CreateQueue(uint8_t QueueLength, size_t size_of_element);
 void DestroyQueue(QueueHandle_t** Queue);
 int QueueSend(QueueHandle_t** queue, const void* ItemToQueue);
 void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue);
+int QueueNonBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue);
 size_t GetNumOfItemsInsideQueue(QueueHandle_t** queue);
 
 

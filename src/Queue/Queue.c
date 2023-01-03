@@ -90,3 +90,27 @@ void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 
     pthread_mutex_unlock(&((*queue)->_QueueMutex));
 }
+
+int QueueNonBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
+{
+    if(GetNumOfItemsInsideQueue(queue) > 0)
+    {
+        if(pthread_mutex_trylock(&((*queue)->_QueueMutex)) == 0)
+        {
+            char* BufferPtrChar = (char*)(*queue)->buffer;
+            size_t BufferAllocShift = ((*queue)->_free_idx) * ((*queue)->_element_size);
+            memcpy(ItemFromQueue, BufferPtrChar + BufferAllocShift, (*queue)->_element_size);
+
+            (*queue)->_itemsInQueue--;
+            (*queue)->_free_idx = ((*queue)->_free_idx + 1) % (*queue)->_length;
+            pthread_mutex_unlock(&((*queue)->_QueueMutex));
+            return 0;
+        }
+        else
+        {
+            return -1;
+        }
+    }
+
+    return -1;
+}

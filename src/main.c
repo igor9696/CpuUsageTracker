@@ -10,6 +10,7 @@
 #include "Reader/Reader.h"
 #include "Analyzer/Analyzer.h"
 #include "Queue/Queue.h"
+#include "Printer/Printer.h"
 
 #define DEBUG 1
 #define QUEUE_SIZE 10
@@ -23,13 +24,13 @@ void* Reader(void* arg)
 {
     FILE *file = NULL;
     cpuTimes_s *cpuTimesArr = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-    memset(cpuTimesArr, 0, sizeof(cpuTimes_s) * systemNumberOfCores);
 
     if(cpuTimesArr == NULL)
     {
         printf("Error during cpuTimesArr malloc!\n");
         return NULL;
     }
+    memset(cpuTimesArr, 0, sizeof(cpuTimes_s) * systemNumberOfCores);
 
     for(;;)
     {
@@ -138,18 +139,21 @@ void* Printer(void* arg)
 {
     cpuLoad_s CoreLoad[systemNumberOfCores];
     memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
-
+    int ret = -1;
     for(;;)
     {
-        // TODO: implement QueueReceive
-        QueueBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
-
-        printf("\rCPU core usage:");
-        for(int core = 0; core < systemNumberOfCores; core++)
+        ret = QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
+        if(ret == 0)
         {
-           printf("\tCORE %2u: %3u%%", CoreLoad[core].core, CoreLoad[core].coreLoadPercentage);
+            PrintFormattedCoreUsage(CoreLoad, systemNumberOfCores);
         }
-        fflush(stdout);
+        // printf("\rCPU core usage:");
+        // for(int core = 0; core < systemNumberOfCores; core++)
+        // {
+        //    printf("\tCORE %2u: %3u%%", CoreLoad[core].core, CoreLoad[core].coreLoadPercentage);
+        // }
+        // fflush(stdout);
+
         
         sleep(1);
     }
