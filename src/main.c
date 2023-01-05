@@ -21,8 +21,7 @@ uint8_t systemNumberOfCores;
 pthread_mutex_t mutexCpuTime;
 QueueHandle_t* cpuTimesQueue;
 QueueHandle_t* cpuPercentageQueue;
-pthread_cond_t SigTermFlag;
-volatile sig_atomic_t SIGTERM_FLAG = 0;
+volatile sig_atomic_t SIG_FLAG = 0;
 
 /* Function declarations */
 void CleanUp_Handler(int signum);
@@ -39,7 +38,7 @@ void* Reader(void* arg)
     }
     memset(cpuTimesArr, 0, sizeof(cpuTimes_s) * systemNumberOfCores);
 
-    for(;;)
+    while(SIG_FLAG == 0)
     {
         char* line_buff = NULL;
         size_t line_len = 0;
@@ -98,8 +97,8 @@ void* Reader(void* arg)
         sleep(1);
     }
 
-CleanUp:
     free(cpuTimesArr);
+    printf("Reader thread closed.\n");
     return arg;
 }
 
@@ -119,16 +118,20 @@ void* Analyzer(void* arg)
         return NULL;
     }
 
-    for(;;)
+    while(SIG_FLAG == 0)
     {   
         QueueBlockingReceive(&cpuTimesQueue, (void*)currentTimesData);
+        if(SIG_FLAG != 0)
+        {
+            break;
+        }
 
         for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
         {
             CoreLoad[core_index] = CalculateCoreLoad(currentTimesData, previousTimesData, core_index);
         }
 
-        /* Update previous cpuTimes and push CoreLoad to queue*/
+        /* Update previous cpuTimes and push CoreLoad data to queue*/
         memcpy((void*)previousTimesData, (const void*)currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
         if (QueueSend(&cpuPercentageQueue, (const void*)CoreLoad) == 1)
         {
@@ -139,7 +142,7 @@ void* Analyzer(void* arg)
     free(currentTimesData);
     free(previousTimesData);
     free(CoreLoad);
-
+    printf("Analyzer thread closed. \n");
     return arg;
 }
 
@@ -148,7 +151,7 @@ void* Printer(void* arg)
     cpuLoad_s CoreLoad[systemNumberOfCores];
     memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
     int ret = -1;
-    for(;;)
+    while(SIG_FLAG == 0)
     {
         ret = QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
         if(ret == 0)
@@ -158,6 +161,8 @@ void* Printer(void* arg)
 
         sleep(1);
     }
+
+    printf("Printer thread closed.\n");
     return arg;
 }
 
@@ -167,7 +172,6 @@ int main()
     pthread_t th[5];
     systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_mutex_init(&mutexCpuTime, NULL);
-    pthread_cond_init(&SigTermFlag, NULL);
     cpuTimesQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
     cpuPercentageQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
     
@@ -184,7 +188,6 @@ int main()
             if(pthread_create(&th[t], NULL, Reader, NULL) != 0)
             {
                 printf("Pthread_create error!\n");
-                goto CleanUp;
             }
         }
 
@@ -193,7 +196,6 @@ int main()
             if(pthread_create(&th[t], NULL, Analyzer, NULL) != 0)
             {
                 printf("Pthread_create error!\n");
-                goto CleanUp;
             }
         }
 
@@ -202,13 +204,12 @@ int main()
             if(pthread_create(&th[t], NULL, Printer, NULL) != 0)
             {
                 printf("Pthread_create error!\n");
-                goto CleanUp;
             }
         }
 
     }
 
-    for(int t = 0; t < 5; t++)
+    for(int t = 0; t < 3; t++)
     {
         if(pthread_join(th[t], NULL) != 0)
         {
@@ -220,15 +221,14 @@ int main()
     pthread_mutex_destroy(&mutexCpuTime);
     DestroyQueue(&cpuTimesQueue);
     DestroyQueue(&cpuPercentageQueue);
+    printf("CUT app closed. \n");
     return 0;
-
-CleanUp:
-    return 1;
 }
 
 
 void CleanUp_Handler(int signum)
 {
-    printf("Cleaning resources...\n");
-    SIGTERM_FLAG = 1;
+    printf("\nCleaning resources...\n");
+    SIG_FLAG = signum;
+    sem_post(&cpuTimesQueue->_QueueCntSem);
 }

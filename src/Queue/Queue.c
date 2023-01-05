@@ -6,6 +6,8 @@
 #include <semaphore.h>
 
 
+
+
 size_t GetNumOfItemsInsideQueue(QueueHandle_t** queue)
 {
     return (*queue)->_itemsInQueue;
@@ -68,7 +70,6 @@ int QueueSend(QueueHandle_t** queue, const void* ItemToQueue)
 
     (*queue)->_itemsInQueue++;
     (*queue)->_alloc_idx = ((*queue)->_alloc_idx + 1) % (*queue)->_length;
-
 
     sem_post(&((*queue)->_QueueCntSem));
     pthread_mutex_unlock(&((*queue)->_QueueMutex));
