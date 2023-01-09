@@ -12,6 +12,7 @@
 #include "Analyzer/Analyzer.h"
 #include "Queue/Queue.h"
 #include "Printer/Printer.h"
+#include "Logger/Logger.h"
 
 #define DEBUG 1
 #define QUEUE_SIZE 10
@@ -25,6 +26,7 @@ uint8_t systemNumberOfCores;
 pthread_mutex_t mutexCpuTime;
 QueueHandle_t* cpuTimesQueue;
 QueueHandle_t* cpuPercentageQueue;
+QueueHandle_t* loggerQueue;
 volatile sig_atomic_t SIG_FLAG = 0;
 
 /* Function declarations */
@@ -34,6 +36,7 @@ void* Reader(void* arg)
 {
     FILE *file = NULL;
     cpuTimes_s *cpuTimesArr = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
+    loggerData_s loggerData = { 0 };
 
     if(cpuTimesArr == NULL)
     {
@@ -77,10 +80,6 @@ void* Reader(void* arg)
                 if ((cpu == core_idx) && (ret == 10))
                 {
                     cpuTimesArr[core_idx] = temp;
-                    // printf("ReaderPROC: cpu=%u user=%llu nice=%llu system=%llu idle=%llu "
-                    //     "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
-                    //     cpu, cpuTimesArr[core_idx].user, cpuTimesArr[core_idx].nice, cpuTimesArr[core_idx].system, cpuTimesArr[core_idx].idle,
-                    //     cpuTimesArr[core_idx].iowait, cpuTimesArr[core_idx].irq, cpuTimesArr[core_idx].softirq, cpuTimesArr[core_idx].steal, cpuTimesArr[core_idx].guest);
                     break;
                 }
             }
@@ -95,15 +94,28 @@ void* Reader(void* arg)
         if(QueueSend(&cpuTimesQueue, (const void*)cpuTimesArr) == 1)
         {
             printf("Queue is full! Skipping adding new data\n");
+            LogFrmtdMessageToFile("FUNC:%s MSG: cpuTimeQueue is full!\n", __FUNCTION__);
         }
-        
+
+        loggerData.message_size = sizeof(cpuLoad_s) * systemNumberOfCores;
+        loggerData.timestamp = time(NULL);
+        loggerData.threadType = READER;
+        loggerData.message = (const void*)cpuTimesArr;
+
+        if (QueueSend(&loggerQueue, &loggerData) == 1)
+        {
+            LogFrmtdMessageToFile("FUNC:%s MSG: loggerQueue is full!\n", __FUNCTION__);
+            // printf("loggerQueue is full! Skipping...\n");
+        }
+
         READER_WD_FLAG = 1;
         free(line_buff);
         sleep(1);
     }
 
     free(cpuTimesArr);
-    printf("Reader thread closed.\n");
+    // printf("Reader thread closed.\n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Reader thread closed\n", __FUNCTION__);
     return arg;
 }
 
@@ -112,6 +124,7 @@ void* Analyzer(void* arg)
     cpuTimes_s *currentTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
     cpuTimes_s *previousTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
     cpuLoad_s *CoreLoad = malloc(sizeof(cpuLoad_s) * systemNumberOfCores);
+    loggerData_s loggerData = { 0 };
 
     memset(currentTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
     memset(previousTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
@@ -136,11 +149,22 @@ void* Analyzer(void* arg)
             CoreLoad[core_index] = CalculateCoreLoad(currentTimesData, previousTimesData, core_index);
         }
 
-        /* Update previous cpuTimes and push CoreLoad data to queue*/
+        /* Update previous cpuTimes and push CoreLoad data to printer thread, and logger thread*/
         memcpy((void*)previousTimesData, (const void*)currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
         if (QueueSend(&cpuPercentageQueue, (const void*)CoreLoad) == 1)
         {
-            printf("cpuPercentageQueue is full! Skipping...\n");
+            LogFrmtdMessageToFile("FUNC:%s MSG: loggerQueue is full! Element push skipped\n", __FUNCTION__);
+        }
+
+        loggerData.message_size = sizeof(cpuTimes_s) * systemNumberOfCores;
+        loggerData.timestamp = time(NULL);
+        loggerData.threadType = ANALYZER;
+        loggerData.message = (const void*)CoreLoad;
+
+        if (QueueSend(&loggerQueue, &loggerData) == 1)
+        {
+            // printf("loggerQueue is full! Skipping...\n");
+            LogFrmtdMessageToFile("FUNC:%s MSG: loggerQueue is full! Element push skipped\n", __FUNCTION__);
         }
 
         ANALYZER_WD_FLAG = 1;    
@@ -149,7 +173,10 @@ void* Analyzer(void* arg)
     free(currentTimesData);
     free(previousTimesData);
     free(CoreLoad);
-    printf("Analyzer thread closed. \n");
+
+    // printf("Analyzer thread closed. \n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Analyzer thread closed\n", __FUNCTION__);
+
     return arg;
 }
 
@@ -171,7 +198,8 @@ void* Printer(void* arg)
         sleep(1);
     }
 
-    printf("Printer thread closed.\n");
+    // printf("Printer thread closed.\n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Printer thread closed\n", __FUNCTION__);
     return arg;
 }
 
@@ -182,8 +210,7 @@ void* Watchdog(void* arg)
     {
         if((READER_WD_FLAG && ANALYZER_WD_FLAG && PRINTER_WD_FLAG) == 0)
         {
-            printf("\nWatchdog triggered! Ending program\n");
-            // CleanUp_Handler(-1);
+            LogFrmtdMessageToFile("FUNC:%s Watchdog triggered!\n", __FUNCTION__);
             exit(EXIT_FAILURE);
             break;
         }
@@ -191,15 +218,29 @@ void* Watchdog(void* arg)
         READER_WD_FLAG = 0;
         ANALYZER_WD_FLAG = 0;
         PRINTER_WD_FLAG = 0;
-
+        LogFrmtdMessageToFile("FUNC:%s MSG: Watchdog OK\n", __FUNCTION__);
         sleep(2);
     }
 
-    printf("Watchdog closed.\n");
+
+    // printf("Watchdog closed.\n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Watchod thread closed\n", __FUNCTION__);
     return arg;
 }
 
+void* Logger(void* arg)
+{
+    while(SIG_FLAG == 0)
+    {
+        loggerData_s data = { 0 };
+        QueueBlockingReceive(&loggerQueue, &data);
+        WriteDebugDataToFile(&data);
+    }
 
+    // printf("Logger thread closed.\n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Logger thread closed\n", __FUNCTION__);
+    return arg;
+}
 
 
 int main()
@@ -207,9 +248,12 @@ int main()
     pthread_t th[5];
     systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_mutex_init(&mutexCpuTime, NULL);
-    cpuTimesQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    cpuPercentageQueue = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
-    
+    Logger_Init();
+
+    cpuTimesQueue       = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    cpuPercentageQueue  = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
+    loggerQueue         = CreateQueue(QUEUE_SIZE, sizeof(loggerData_s));
+
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
     action.sa_handler = CleanUp_Handler;
@@ -249,9 +293,18 @@ int main()
                 printf("Pthread_create error!\n");
             }
         }
+
+        else if(t == 4)
+        {
+            if(pthread_create(&th[t], NULL, Logger, NULL) != 0)
+            {
+                printf("Pthread_create error!\n");
+            }
+        }
+
     }
 
-    for(int t = 0; t < 4; t++)
+    for(int t = 0; t < 5; t++)
     {
         if(pthread_join(th[t], NULL) != 0)
         {
@@ -263,7 +316,11 @@ int main()
     pthread_mutex_destroy(&mutexCpuTime);
     DestroyQueue(&cpuTimesQueue);
     DestroyQueue(&cpuPercentageQueue);
+    DestroyQueue(&loggerQueue);
+    Logger_DeInit();
+
     printf("CUT app closed. \n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: CUT app closed!\n", __FUNCTION__);
     return 0;
 }
 
@@ -271,6 +328,9 @@ int main()
 void CleanUp_Handler(int signum)
 {
     printf("\nCleaning resources...\n");
+    LogFrmtdMessageToFile("FUNC:%s MSG: Cleaning resources\n", __FUNCTION__);
+
     SIG_FLAG = signum;
     sem_post(&cpuTimesQueue->_QueueCntSem);
+    sem_post(&loggerQueue->_QueueCntSem);
 }
