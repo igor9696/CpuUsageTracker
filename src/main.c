@@ -16,6 +16,10 @@
 #define DEBUG 1
 #define QUEUE_SIZE 10
 
+uint8_t READER_WD_FLAG = 1;
+uint8_t ANALYZER_WD_FLAG = 1;
+uint8_t PRINTER_WD_FLAG = 1;
+
 /* Global variable declarations */
 uint8_t systemNumberOfCores;
 pthread_mutex_t mutexCpuTime;
@@ -93,6 +97,7 @@ void* Reader(void* arg)
             printf("Queue is full! Skipping adding new data\n");
         }
         
+        READER_WD_FLAG = 1;
         free(line_buff);
         sleep(1);
     }
@@ -137,6 +142,8 @@ void* Analyzer(void* arg)
         {
             printf("cpuPercentageQueue is full! Skipping...\n");
         }
+
+        ANALYZER_WD_FLAG = 1;    
     }
 
     free(currentTimesData);
@@ -151,6 +158,7 @@ void* Printer(void* arg)
     cpuLoad_s CoreLoad[systemNumberOfCores];
     memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
     int ret = -1;
+
     while(SIG_FLAG == 0)
     {
         ret = QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
@@ -159,12 +167,39 @@ void* Printer(void* arg)
             PrintFormattedCoreUsage(CoreLoad, systemNumberOfCores);
         }
 
+        PRINTER_WD_FLAG = 1;
         sleep(1);
     }
 
     printf("Printer thread closed.\n");
     return arg;
 }
+
+void* Watchdog(void* arg)
+{
+    /* If threads won't send message within 2 sec indicating that they are working, close program */
+    while(SIG_FLAG == 0)
+    {
+        if((READER_WD_FLAG && ANALYZER_WD_FLAG && PRINTER_WD_FLAG) == 0)
+        {
+            printf("\nWatchdog triggered! Ending program\n");
+            // CleanUp_Handler(-1);
+            exit(EXIT_FAILURE);
+            break;
+        }
+
+        READER_WD_FLAG = 0;
+        ANALYZER_WD_FLAG = 0;
+        PRINTER_WD_FLAG = 0;
+
+        sleep(2);
+    }
+
+    printf("Watchdog closed.\n");
+    return arg;
+}
+
+
 
 
 int main()
@@ -207,9 +242,16 @@ int main()
             }
         }
 
+        else if(t == 3)
+        {
+            if(pthread_create(&th[t], NULL, Watchdog, NULL) != 0)
+            {
+                printf("Pthread_create error!\n");
+            }
+        }
     }
 
-    for(int t = 0; t < 3; t++)
+    for(int t = 0; t < 4; t++)
     {
         if(pthread_join(th[t], NULL) != 0)
         {
