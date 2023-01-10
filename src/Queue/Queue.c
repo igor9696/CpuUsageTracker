@@ -57,6 +57,11 @@ void DestroyQueue(QueueHandle_t** Queue)
 
 int QueueSend(QueueHandle_t** queue, const void* ItemToQueue)
 {
+    if(*queue == NULL)
+    {
+        return -1;
+    }
+
     if((*queue)->_length == GetNumOfItemsInsideQueue(queue))
     {
         return 1;
@@ -78,6 +83,11 @@ int QueueSend(QueueHandle_t** queue, const void* ItemToQueue)
 
 void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 {
+    if(*queue == NULL)
+    {
+        return -1;
+    }
+
     // wait until something inside queue
     sem_wait(&((*queue)->_QueueCntSem));
     pthread_mutex_lock(&((*queue)->_QueueMutex));
@@ -94,6 +104,11 @@ void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 
 int QueueNonBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 {
+    if(*queue == NULL)
+    {
+        return -1;
+    }
+
     if(GetNumOfItemsInsideQueue(queue) > 0)
     {
         if(pthread_mutex_trylock(&((*queue)->_QueueMutex)) == 0)
