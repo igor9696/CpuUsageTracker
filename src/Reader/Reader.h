@@ -21,6 +21,11 @@ typedef struct cpuTimes_s
 } cpuTimes_s;
 
 
+cpuTimes_s* GetCpuTimeMemoryPool();
+void DeallocateCpuTimeMemoryPool(cpuTimes_s** cpuTimes);
+void GetProcStatRaw(cpuTimes_s** cpuTimesRawOutput);
+void PushRawCpuTimesToLogger(const cpuTimes_s* cpuTimesRaw);
+void PushRawCpuTimesToAnalyzer(const cpuTimes_s* cpuTimesRaw);
 
 
 #endif // READER_H

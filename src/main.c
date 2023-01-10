@@ -34,91 +34,29 @@ void CleanUp_Handler(int signum);
 
 void* Reader(void* arg)
 {
-    FILE *file = NULL;
-    cpuTimes_s *cpuTimesArr = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-
-    if(cpuTimesArr == NULL)
+    cpuTimes_s *cpuTimesRaw = GetCpuTimeMemoryPool();
+    if(cpuTimesRaw == NULL)
     {
-        LogPrintToFile("Error during cpuTimesArr malloc!\n");
-        return NULL;
+        LogPrintToFile("FUNC:%s Msg: Error during MemoryPool allocation!\n", __FUNCTION__);
+        return arg;
     }
-    memset(cpuTimesArr, 0, sizeof(cpuTimes_s) * systemNumberOfCores);
 
     while(SIG_FLAG == 0)
     {
-        char* line_buff = NULL;
-        size_t line_len = 0;
-        cpuTimes_s temp = { 0 };
-        
-        /*Get raw data from /proc/stat */
-        if((file = fopen("/proc/stat", "r")) == NULL)
-        {
-            LogPrintToFile("FUNC:%s Msg: Error during file open!\n", __FUNCTION__);
-            break;
-        }
-
-        while(getline(&line_buff, &line_len, file) != -1)
-        {
-            for(int core_idx = 0; core_idx < MAX_NUMBER_OF_CORES; core_idx++)
-            {
-                int ret = 0;
-                int cpu = -1;
-
-                ret = sscanf(line_buff, "cpu%d %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                &cpu,
-                &temp.user,
-                &temp.nice,
-                &temp.system,
-                &temp.idle,
-                &temp.iowait,
-                &temp.irq,
-                &temp.softirq,
-                &temp.steal,
-                &temp.guest);
-
-                if ((cpu == core_idx) && (ret == 10))
-                {
-                    cpuTimesArr[core_idx] = temp;
-                    break;
-                }
-            }
-        }
-
-        if(fclose(file) != 0)
-        {
-            LogPrintToFile("FUNC:%s Msg: Error during fclose!\n", __FUNCTION__);
-            break;
-        }
-
-        for(int core_idx = 0; core_idx < systemNumberOfCores; core_idx++)
-        {
-            LogPrintToFile("FUNC:%s Msg: cpu=%d user=%llu nice=%llu system=%llu idle=%llu "
-                        "iowait=%llu irq=%llu softirq=%llu steal=%llu guest=%llu\n",
-                        __FUNCTION__,
-                        core_idx,
-                        cpuTimesArr[core_idx].user, 
-                        cpuTimesArr[core_idx].nice, 
-                        cpuTimesArr[core_idx].system, 
-                        cpuTimesArr[core_idx].idle,
-                        cpuTimesArr[core_idx].iowait, 
-                        cpuTimesArr[core_idx].irq, 
-                        cpuTimesArr[core_idx].softirq, 
-                        cpuTimesArr[core_idx].steal,
-                        cpuTimesArr[core_idx].guest
-            );
-        }
-
-        if(QueueSend(&cpuTimesQueue, (const void*)cpuTimesArr) == 1)
-        {
-            LogPrintToFile("FUNC:%s Msg: cpuTimeQueue is full!\n", __FUNCTION__);
-        }
+        GetProcStatRaw(&cpuTimesRaw);
+        PushRawCpuTimesToLogger(cpuTimesRaw);
+        PushRawCpuTimesToAnalyzer(cpuTimesRaw);
+        // if(QueueSend(&cpuTimesQueue, (const void*)cpuTimesRaw) == 1)
+        // {
+        //     LogPrintToFile("FUNC:%s Msg: cpuTimeQueue is full!\n", __FUNCTION__);
+        // }
 
         READER_WD_FLAG = 1;
-        free(line_buff);
+        // UpdateWatchdog();
         sleep(1);
     }
-
-    free(cpuTimesArr);
+    
+    DeallocateCpuTimeMemoryPool(&cpuTimesRaw);
     LogPrintToFile("FUNC:%s Msg: Reader thread closed\n", __FUNCTION__);
     return arg;
 }
@@ -150,7 +88,7 @@ void* Analyzer(void* arg)
         for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
         {
             CoreLoad[core_index] = CalculateCoreLoad(currentTimesData, previousTimesData, core_index);
-            LogPrintToFile("FUNC: %s Msg: Core: %2u, Load: %3u%%\n", 
+            LogPrintToFile("FUNC:%s Msg: Core: %2u, Load: %3u%%\n", 
                             __FUNCTION__, 
                             CoreLoad[core_index].core,
                             CoreLoad[core_index].coreLoadPercentage);
