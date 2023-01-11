@@ -75,10 +75,6 @@ void GetLoadFromEveryCore(cpuTimes_s** currentTimesData, cpuTimes_s** previousTi
     for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
     {
         (*OutputLoad)[core_index] = CalculateCoreLoad(*currentTimesData, *previousTimesData, core_index);
-        // LogPrintToFile("FUNC:%s Msg: Core: %2u, Load: %3u%%\n", 
-        //                 __FUNCTION__, 
-        //                 OutputLoad[core_index].core,
-        //                 OutputLoad[core_index].coreLoadPercentage);
     }
     
     UpdatePreviousCpuTimeData(currentTimesData, previousTimesData);
@@ -92,3 +88,13 @@ void PushLoadDataToPrinter(const cpuLoad_s* OutputLoad)
     }
 }
 
+void PushLoadDataToLogger(const cpuLoad_s* OutputLoad)
+{
+    for(int core_idx = 0; core_idx < systemNumberOfCores; core_idx++)
+    {
+        LogPrintToFile("FUNC:%s Msg: Core: %2u, Load: %3u%%\n", 
+                    __FUNCTION__, 
+                    OutputLoad[core_idx].core,
+                    OutputLoad[core_idx].coreLoadPercentage);
+    }
+}

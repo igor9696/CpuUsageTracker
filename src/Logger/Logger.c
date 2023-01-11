@@ -51,30 +51,6 @@ void ProcessLogDataToFile()
     fclose(file);
 }
 
-// void LogFrmtdMessageToFile(const char* message, ...)
-// {
-//     FILE* file = NULL;
-//     va_list args;
-//     char buffer[MAX_MESSAGE_SIZE] = { 0 };
-//     time_t mytime = time(NULL);
-//     char* time_str = ctime(&mytime);
-//     size_t time_str_len = strlen(time_str);
-//     time_str[time_str_len - 1] = ' ';
-
-//     memcpy(buffer, time_str, time_str_len);
-//     memcpy(buffer + time_str_len, message, strlen(message));
-
-//     pthread_mutex_lock(&fileMutex);
-//     file = fopen(FILE_NAME, "a");
-    
-//     va_start(args, message);
-//     vfprintf(file, buffer, args);
-//     va_end(args);
-
-//     fclose(file);
-//     pthread_mutex_unlock(&fileMutex);
-// }
-
 void LogPrintToFile(const char* message, ...)
 {
     if(strlen(message) > MAX_MESSAGE_SIZE)

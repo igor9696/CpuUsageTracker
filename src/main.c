@@ -23,7 +23,6 @@
 
 /* Global variable declarations */
 uint8_t systemNumberOfCores;
-pthread_mutex_t mutexCpuTime;
 QueueHandle_t* cpuTimesQueue;
 QueueHandle_t* cpuPercentageQueue;
 volatile sig_atomic_t SIG_FLAG = 0;
@@ -31,6 +30,9 @@ uint8_t THREADS_TERMINATED_FLAG = 0;
 
 /* Function declarations */
 void CleanUp_Handler(int signum);
+void CreateThreads(pthread_t* th);
+int JoinThreads(pthread_t* th);
+void SigHandlerInit(struct sigaction* action);
 
 void* Reader(void* arg)
 {
@@ -79,6 +81,7 @@ void* Analyzer(void* arg)
         }
         GetLoadFromEveryCore(&currentTimesData, &previousTimesData, &CoreLoad);
         PushLoadDataToPrinter(CoreLoad);
+        PushLoadDataToLogger(CoreLoad);
         WatchdogUpdate();
     }
 
@@ -89,15 +92,13 @@ void* Analyzer(void* arg)
 
 void* Printer(void* arg)
 {
-    WatchdogRegister();
     cpuLoad_s CoreLoad[systemNumberOfCores];
     memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
-    int ret = -1;
+    WatchdogRegister();
 
     while(SIG_FLAG == SIG_NOT_ACTIVE)
     {
-        ret = QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
-        if(ret == 0)
+        if(0 == QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad))
         {
             PrintFormattedCoreUsage(CoreLoad, systemNumberOfCores);
         }
@@ -105,7 +106,7 @@ void* Printer(void* arg)
         sleep(1);
     }
 
-    LogPrintToFile("FUNC:%s MSG: Printer thread closed\n", __FUNCTION__);
+    LogPrintToFile("FUNC:%s Msg: Printer thread closed\n", __FUNCTION__);
     return arg;
 }
 
@@ -142,28 +143,47 @@ void* Logger(void* arg)
         WatchdogUpdate();
     }
 
-    LogPrintToFile("FUNC:%s MSG: Logger thread closed\n", __FUNCTION__);
+    LogPrintToFile("FUNC:%s Msg: Logger thread closed\n", __FUNCTION__);
     return arg;
 }
 
-
 int main()
 {
-    pthread_t th[NUMBER_OF_THREADS];
+    pthread_t ThreadPool[NUMBER_OF_THREADS];
+    struct sigaction action;
     systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
-    pthread_mutex_init(&mutexCpuTime, NULL);
     Logger_Init();
     WatchdogInit(NUMBER_OF_THREADS);
+    SigHandlerInit(&action);
 
     cpuTimesQueue       = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
     cpuPercentageQueue  = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
 
-    struct sigaction action;
-    memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = CleanUp_Handler;
-    sigaction(SIGTERM, &action, NULL);
-    sigaction(SIGINT, &action, NULL);
+    CreateThreads(ThreadPool);
+    LogPrintToFile("FUNC:%s Msg: CUT application started\n", __FUNCTION__);
+    JoinThreads(ThreadPool);
 
+    /* Clean resources */
+    DestroyQueue(&cpuTimesQueue);
+    DestroyQueue(&cpuPercentageQueue);
+    Logger_DeInit();
+    WatchdogDeinit();
+
+    printf("CUT app closed. \n");
+    LogPrintToFile("FUNC:%s MSG: CUT app closed!\n", __FUNCTION__);
+    return 0;
+}
+
+void CleanUp_Handler(int signum)
+{
+    printf("\nCleaning resources...\n");
+    LogPrintToFile("FUNC:%s Msg: Cleaning resources\n", __FUNCTION__);
+    SIG_FLAG = signum;
+    sem_post(&cpuTimesQueue->_QueueCntSem);
+}
+
+void CreateThreads(pthread_t* th)
+{
     for(int t = 0; t < NUMBER_OF_THREADS; t++)
     {
         if(t == 0)
@@ -205,10 +225,11 @@ int main()
                 printf("Pthread_create error!\n");
             }
         }
-
     }
-    LogPrintToFile("FUNC:%s Msg: CUT application started\n", __FUNCTION__);
+}
 
+int JoinThreads(pthread_t* th)
+{
     for(int t = 0; t < NUMBER_OF_THREADS; t++)
     {
         if(t == 4)
@@ -227,22 +248,13 @@ int main()
         }
     }
 
-    pthread_mutex_destroy(&mutexCpuTime);
-    DestroyQueue(&cpuTimesQueue);
-    DestroyQueue(&cpuPercentageQueue);
-    Logger_DeInit();
-    WatchdogDeinit();
-
-    printf("CUT app closed. \n");
-    LogPrintToFile("FUNC:%s MSG: CUT app closed!\n", __FUNCTION__);
     return 0;
 }
 
-
-void CleanUp_Handler(int signum)
+void SigHandlerInit(struct sigaction* action)
 {
-    printf("\nCleaning resources...\n");
-    LogPrintToFile("FUNC:%s MSG: Cleaning resources\n", __FUNCTION__);
-    SIG_FLAG = signum;
-    sem_post(&cpuTimesQueue->_QueueCntSem);
+    memset(action, 0, sizeof(struct sigaction));
+    action->sa_handler = CleanUp_Handler;
+    sigaction(SIGTERM, action, NULL);
+    sigaction(SIGINT, action, NULL);
 }
