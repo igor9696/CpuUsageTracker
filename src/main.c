@@ -16,6 +16,8 @@
 
 #define DEBUG 1
 #define QUEUE_SIZE 10
+#define SIG_NOT_ACTIVE 0
+#define SIG_ACTIVE 1
 
 uint8_t READER_WD_FLAG = 1;
 uint8_t ANALYZER_WD_FLAG = 1;
@@ -41,15 +43,11 @@ void* Reader(void* arg)
         return arg;
     }
 
-    while(SIG_FLAG == 0)
+    while(SIG_FLAG == SIG_NOT_ACTIVE)
     {
         GetProcStatRaw(&cpuTimesRaw);
         PushRawCpuTimesToLogger(cpuTimesRaw);
         PushRawCpuTimesToAnalyzer(cpuTimesRaw);
-        // if(QueueSend(&cpuTimesQueue, (const void*)cpuTimesRaw) == 1)
-        // {
-        //     LogPrintToFile("FUNC:%s Msg: cpuTimeQueue is full!\n", __FUNCTION__);
-        // }
 
         READER_WD_FLAG = 1;
         // UpdateWatchdog();
@@ -63,51 +61,28 @@ void* Reader(void* arg)
 
 void* Analyzer(void* arg)
 {
-    cpuTimes_s *currentTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-    cpuTimes_s *previousTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
-    cpuLoad_s *CoreLoad = malloc(sizeof(cpuLoad_s) * systemNumberOfCores);
-    
-    memset(currentTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    memset(previousTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
-    memset(CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
+    cpuTimes_s* currentTimesData;
+    cpuTimes_s* previousTimesData;
+    cpuLoad_s* CoreLoad;
 
-    if(currentTimesData == NULL || previousTimesData == NULL || CoreLoad == NULL)
+    if(-1 == AllocateMemoryPools(&currentTimesData, &previousTimesData, &CoreLoad))
     {
-        LogPrintToFile("Error during analyzer malloc!\n");
         return NULL;
     }
-
-    while(SIG_FLAG == 0)
+    
+    while(SIG_FLAG == SIG_NOT_ACTIVE)
     {   
         QueueBlockingReceive(&cpuTimesQueue, (void*)currentTimesData);
-        if(SIG_FLAG != 0)
+        if(SIG_FLAG != SIG_NOT_ACTIVE)
         {
             break;
         }
-
-        for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
-        {
-            CoreLoad[core_index] = CalculateCoreLoad(currentTimesData, previousTimesData, core_index);
-            LogPrintToFile("FUNC:%s Msg: Core: %2u, Load: %3u%%\n", 
-                            __FUNCTION__, 
-                            CoreLoad[core_index].core,
-                            CoreLoad[core_index].coreLoadPercentage);
-        }
-
-        /* Update previous cpuTimes and push CoreLoad data to Printer thread*/
-        memcpy((void*)previousTimesData, (const void*)currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
-        if (QueueSend(&cpuPercentageQueue, (const void*)CoreLoad) == 1)
-        {
-            LogPrintToFile("FUNC:%s Msg: cpuPercentageQueue is full! Element push skipped\n", __FUNCTION__);
-        }
-
+        GetLoadFromEveryCore(&currentTimesData, &previousTimesData, &CoreLoad);
+        PushLoadDataToPrinter(CoreLoad);
         ANALYZER_WD_FLAG = 1;    
     }
 
-    free(currentTimesData);
-    free(previousTimesData);
-    free(CoreLoad);
-
+    DeallocateMemoryPools(&currentTimesData, &previousTimesData, &CoreLoad);
     LogPrintToFile("FUNC:%s Msg: Analyzer thread closed\n", __FUNCTION__);
     return arg;
 }

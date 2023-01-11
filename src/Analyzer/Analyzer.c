@@ -1,6 +1,44 @@
+#include <string.h>
+#include <stdlib.h>
+
 #include "Analyzer.h"
 #include "../Reader/Reader.h"
+#include "../Logger/Logger.h"
+#include "../Queue/Queue.h"
 
+extern uint8_t systemNumberOfCores;
+extern QueueHandle_t* cpuPercentageQueue;
+
+static void UpdatePreviousCpuTimeData(cpuTimes_s** currentTimesData, cpuTimes_s** previousTimesData)
+{
+    memcpy(*previousTimesData, *currentTimesData, (sizeof(cpuTimes_s) * systemNumberOfCores));
+}
+
+int AllocateMemoryPools(cpuTimes_s** currentTimesData, cpuTimes_s** previousTimesData, cpuLoad_s** OutputLoad)
+{
+    *currentTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
+    *previousTimesData = malloc(sizeof(cpuTimes_s) * systemNumberOfCores);
+    *OutputLoad = malloc(sizeof(cpuLoad_s) * systemNumberOfCores);
+
+    if(*currentTimesData == NULL || *previousTimesData == NULL || *OutputLoad == NULL)
+    {
+        LogPrintToFile("FUNC:%s Msg: Error during memory pool allocation!\n", __FUNCTION__);        
+        return -1;
+    }
+
+    memset(*currentTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    memset(*previousTimesData, 0, (sizeof(cpuTimes_s) * systemNumberOfCores));
+    memset(*OutputLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
+
+    return 0;
+}
+
+void DeallocateMemoryPools(cpuTimes_s** currentTimesData, cpuTimes_s** previousTimesData, cpuLoad_s** OutputLoad)
+{
+    free(*currentTimesData);
+    free(*previousTimesData);
+    free(*OutputLoad);
+}
 
 cpuLoad_s CalculateCoreLoad(const cpuTimes_s* currentTimes, const cpuTimes_s* previousTimes, uint8_t core)
 {
@@ -30,4 +68,26 @@ cpuLoad_s CalculateCoreLoad(const cpuTimes_s* currentTimes, const cpuTimes_s* pr
     ret.coreLoadPercentage = CPU_Percentage;
 
     return ret;
+}
+
+void GetLoadFromEveryCore(cpuTimes_s** currentTimesData, cpuTimes_s** previousTimesData, cpuLoad_s** OutputLoad)
+{
+    for(int core_index = 0; core_index < systemNumberOfCores; core_index++)
+    {
+        (*OutputLoad)[core_index] = CalculateCoreLoad(*currentTimesData, *previousTimesData, core_index);
+        // LogPrintToFile("FUNC:%s Msg: Core: %2u, Load: %3u%%\n", 
+        //                 __FUNCTION__, 
+        //                 OutputLoad[core_index].core,
+        //                 OutputLoad[core_index].coreLoadPercentage);
+    }
+    
+    UpdatePreviousCpuTimeData(currentTimesData, previousTimesData);
+}
+
+void PushLoadDataToPrinter(const cpuLoad_s* OutputLoad)
+{
+    if (QueueSend(&cpuPercentageQueue, (const void*)OutputLoad) == 1)
+    {
+        LogPrintToFile("FUNC:%s Msg: cpuPercentageQueue is full! Element push skipped\n", __FUNCTION__);
+    }
 }
