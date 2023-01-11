@@ -91,3 +91,4 @@ void PushLoadDataToPrinter(const cpuLoad_s* OutputLoad)
         LogPrintToFile("FUNC:%s Msg: cpuPercentageQueue is full! Element push skipped\n", __FUNCTION__);
     }
 }
+

@@ -13,15 +13,13 @@
 #include "Queue/Queue.h"
 #include "Printer/Printer.h"
 #include "Logger/Logger.h"
+#include "Watchdog/Watchdog.h"
 
 #define DEBUG 1
 #define QUEUE_SIZE 10
 #define SIG_NOT_ACTIVE 0
 #define SIG_ACTIVE 1
-
-uint8_t READER_WD_FLAG = 1;
-uint8_t ANALYZER_WD_FLAG = 1;
-uint8_t PRINTER_WD_FLAG = 1;
+#define NUMBER_OF_THREADS 5
 
 /* Global variable declarations */
 uint8_t systemNumberOfCores;
@@ -36,7 +34,9 @@ void CleanUp_Handler(int signum);
 
 void* Reader(void* arg)
 {
+    WatchdogRegister();
     cpuTimes_s *cpuTimesRaw = GetCpuTimeMemoryPool();
+
     if(cpuTimesRaw == NULL)
     {
         LogPrintToFile("FUNC:%s Msg: Error during MemoryPool allocation!\n", __FUNCTION__);
@@ -48,9 +48,7 @@ void* Reader(void* arg)
         GetProcStatRaw(&cpuTimesRaw);
         PushRawCpuTimesToLogger(cpuTimesRaw);
         PushRawCpuTimesToAnalyzer(cpuTimesRaw);
-
-        READER_WD_FLAG = 1;
-        // UpdateWatchdog();
+        WatchdogUpdate();
         sleep(1);
     }
     
@@ -64,6 +62,8 @@ void* Analyzer(void* arg)
     cpuTimes_s* currentTimesData;
     cpuTimes_s* previousTimesData;
     cpuLoad_s* CoreLoad;
+
+    WatchdogRegister();
 
     if(-1 == AllocateMemoryPools(&currentTimesData, &previousTimesData, &CoreLoad))
     {
@@ -79,7 +79,7 @@ void* Analyzer(void* arg)
         }
         GetLoadFromEveryCore(&currentTimesData, &previousTimesData, &CoreLoad);
         PushLoadDataToPrinter(CoreLoad);
-        ANALYZER_WD_FLAG = 1;    
+        WatchdogUpdate();
     }
 
     DeallocateMemoryPools(&currentTimesData, &previousTimesData, &CoreLoad);
@@ -89,19 +89,19 @@ void* Analyzer(void* arg)
 
 void* Printer(void* arg)
 {
+    WatchdogRegister();
     cpuLoad_s CoreLoad[systemNumberOfCores];
     memset(&CoreLoad, 0, (sizeof(cpuLoad_s) * systemNumberOfCores));
     int ret = -1;
 
-    while(SIG_FLAG == 0)
+    while(SIG_FLAG == SIG_NOT_ACTIVE)
     {
         ret = QueueNonBlockingReceive(&cpuPercentageQueue, (void*)&CoreLoad);
         if(ret == 0)
         {
             PrintFormattedCoreUsage(CoreLoad, systemNumberOfCores);
         }
-
-        PRINTER_WD_FLAG = 1;
+        WatchdogUpdate();
         sleep(1);
     }
 
@@ -111,21 +111,22 @@ void* Printer(void* arg)
 
 void* Watchdog(void* arg)
 {
-    /* If threads won't set WD_FLAG within 2 sec indicating that they are working, close program */
-    while(SIG_FLAG == 0)
-    {
-        if((READER_WD_FLAG && ANALYZER_WD_FLAG && PRINTER_WD_FLAG) == 0)
-        {
-            LogPrintToFile("FUNC:%s Watchdog timeout!\n", __FUNCTION__);
-            exit(EXIT_FAILURE);
-            break;
-        }
-
-        READER_WD_FLAG = 0;
-        ANALYZER_WD_FLAG = 0;
-        PRINTER_WD_FLAG = 0;
-        LogPrintToFile("FUNC:%s MSG: Watchdog reseted\n", __FUNCTION__);
+    WatchdogRegister();
+    while(SIG_FLAG == SIG_NOT_ACTIVE)
+    {        
         sleep(2);
+        WatchdogUpdate();
+        if(-1 == WatchdogCheck())
+        {
+            printf("Watchdog tirggered!\n");
+            LogPrintToFile("FUNC:%s Watchdog timeout!\n", __FUNCTION__);
+            sleep(1);
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            LogPrintToFile("FUNC:%s Msg: Watchdog OK\n", __FUNCTION__);
+        }
     }
 
     LogPrintToFile("FUNC:%s MSG: Watchod thread closed\n", __FUNCTION__);
@@ -134,9 +135,11 @@ void* Watchdog(void* arg)
 
 void* Logger(void* arg)
 {
+    WatchdogRegister();
     while(THREADS_TERMINATED_FLAG == 0)
     {
         ProcessLogDataToFile();
+        WatchdogUpdate();
     }
 
     LogPrintToFile("FUNC:%s MSG: Logger thread closed\n", __FUNCTION__);
@@ -146,10 +149,11 @@ void* Logger(void* arg)
 
 int main()
 {
-    pthread_t th[5];
+    pthread_t th[NUMBER_OF_THREADS];
     systemNumberOfCores = sysconf(_SC_NPROCESSORS_ONLN);
     pthread_mutex_init(&mutexCpuTime, NULL);
     Logger_Init();
+    WatchdogInit(NUMBER_OF_THREADS);
 
     cpuTimesQueue       = CreateQueue(QUEUE_SIZE, (sizeof(cpuTimes_s) * systemNumberOfCores));
     cpuPercentageQueue  = CreateQueue(QUEUE_SIZE, (sizeof(cpuLoad_s) * systemNumberOfCores));
@@ -160,7 +164,7 @@ int main()
     sigaction(SIGTERM, &action, NULL);
     sigaction(SIGINT, &action, NULL);
 
-    for(int t = 0; t < 5; t++)
+    for(int t = 0; t < NUMBER_OF_THREADS; t++)
     {
         if(t == 0)
         {
@@ -203,10 +207,9 @@ int main()
         }
 
     }
-
     LogPrintToFile("FUNC:%s Msg: CUT application started\n", __FUNCTION__);
 
-    for(int t = 0; t < 5; t++)
+    for(int t = 0; t < NUMBER_OF_THREADS; t++)
     {
         if(t == 4)
         {
@@ -228,6 +231,7 @@ int main()
     DestroyQueue(&cpuTimesQueue);
     DestroyQueue(&cpuPercentageQueue);
     Logger_DeInit();
+    WatchdogDeinit();
 
     printf("CUT app closed. \n");
     LogPrintToFile("FUNC:%s MSG: CUT app closed!\n", __FUNCTION__);
