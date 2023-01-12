@@ -174,10 +174,6 @@ int main()
     return 0;
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 0042dc8ed112c6bdbf3d5940b16bfec89e4af88c
 void CleanUp_Handler(int signum)
 {
     printf("\nCleaning resources...\n");
