@@ -1,0 +1,1 @@
+add_library(WATCHDOG_LIB Watchdog.c)

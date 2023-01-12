@@ -1,0 +1,1 @@
+add_library(PRINTER_LIB Printer.c)
