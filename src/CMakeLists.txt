@@ -1,8 +1,8 @@
 add_subdirectory(Reader)
 add_subdirectory(Analyzer)
-add_subdirectory(Queue)
 add_subdirectory(Printer)
 add_subdirectory(Logger)
+add_subdirectory(Queue)
 add_subdirectory(Watchdog)
 
 add_executable(${PROJECT_NAME} main.c)

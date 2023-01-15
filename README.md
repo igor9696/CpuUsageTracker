@@ -6,6 +6,7 @@ Technologies used:
 - GTest
 - C
 - GCC/CLang
+- Valgrind
 
 ## Structure
 ```
@@ -121,6 +122,29 @@ Thu Jan 12 10:36:23 2023 FUNC:Watchdog Msg: Watchdog OK
 Thu Jan 12 10:36:23 2023 FUNC:Watchdog MSG: Watchod thread closed
 Thu Jan 12 10:36:23 2023 FUNC:Printer Msg: Printer thread closed
 Thu Jan 12 10:36:23 2023 FUNC:Reader Msg: Reader thread closed
+```
+
+## Valgrind summary
+```
+valgrind --leak-check=full --show-leak-kinds=all ./CUT
+
+==26638== Memcheck, a memory error detector
+==26638== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==26638== Using Valgrind-3.15.0 and LibVEX; rerun with -h for copyright info
+==26638== Command: ./CUT
+==26638== 
+CPU core usage: CORE  0:   1%   CORE  1:   2%   CORE  2:   1%   CORE  3:   1%^C
+Cleaning resources...
+CUT app closed. 
+==26638== 
+==26638== HEAP SUMMARY:
+==26638==     in use at exit: 0 bytes in 0 blocks
+==26638==   total heap usage: 236 allocs, 236 frees, 310,417 bytes allocated
+==26638== 
+==26638== All heap blocks were freed -- no leaks are possible
+==26638== 
+==26638== For lists of detected and suppressed errors, rerun with: -s
+==26638== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ```
 ## Known limitations
 1. Script works only in Linux based systems
