@@ -24,6 +24,7 @@ cpuTimes_s* GetCpuTimeMemoryPool()
 void DeallocateCpuTimeMemoryPool(cpuTimes_s** cpuTimes)
 {
     free(*cpuTimes);
+    *cpuTimes = NULL;
 }
 
 void GetProcStatRaw(cpuTimes_s** cpuTimesRawOutput)
