@@ -51,6 +51,7 @@ void WatchdogDeinit()
     pthread_mutex_destroy(&watchdogMutex);
     pthread_mutex_destroy(&watchdogUpdateCheckMutex);
     free(Watchdog.ThreadsArr);
+    Watchdog.ThreadsArr = NULL;
 }
 
 void WatchdogRegister()

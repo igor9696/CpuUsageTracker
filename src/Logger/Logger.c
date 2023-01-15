@@ -31,6 +31,7 @@ void Logger_DeInit()
 {
     DestroyQueue(&logPrintQueue);
     pthread_mutex_destroy(&fileMutex);
+    logPrintQueue = NULL;
 }
 
 void ProcessLogDataToFile()
@@ -38,7 +39,10 @@ void ProcessLogDataToFile()
     FILE* file = NULL;
     log_t logPrint;
     memset(&logPrint, 0, sizeof(log_t));
-    QueueBlockingReceive(&logPrintQueue, &logPrint);
+    if(-1 == QueueBlockingReceiveTimeout(&logPrintQueue, &logPrint, 1))
+    {
+        return;
+    }
 
     file = fopen(FILE_NAME, "a");
     if (file == NULL)

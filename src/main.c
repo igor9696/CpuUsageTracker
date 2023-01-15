@@ -20,11 +20,13 @@
 #define SIG_NOT_ACTIVE 0
 #define SIG_ACTIVE 1
 #define NUMBER_OF_THREADS 5
+#define READER_THREAD_READ_INTERVAL_SEC 1
+
 
 /* Global variable declarations */
-uint8_t systemNumberOfCores;
-QueueHandle_t* cpuTimesQueue;
-QueueHandle_t* cpuPercentageQueue;
+uint8_t systemNumberOfCores = 0;
+QueueHandle_t* cpuTimesQueue = NULL;
+QueueHandle_t* cpuPercentageQueue = NULL;
 volatile sig_atomic_t SIG_FLAG = 0;
 uint8_t THREADS_TERMINATED_FLAG = 0;
 
@@ -51,7 +53,7 @@ void* Reader(void* arg)
         PushRawCpuTimesToLogger(cpuTimesRaw);
         PushRawCpuTimesToAnalyzer(cpuTimesRaw);
         WatchdogUpdate();
-        sleep(1);
+        sleep(READER_THREAD_READ_INTERVAL_SEC);
     }
     
     DeallocateCpuTimeMemoryPool(&cpuTimesRaw);
@@ -61,9 +63,9 @@ void* Reader(void* arg)
 
 void* Analyzer(void* arg)
 {
-    cpuTimes_s* currentTimesData;
-    cpuTimes_s* previousTimesData;
-    cpuLoad_s* CoreLoad;
+    cpuTimes_s* currentTimesData = NULL;
+    cpuTimes_s* previousTimesData = NULL;
+    cpuLoad_s* CoreLoad = NULL;
 
     WatchdogRegister();
 
@@ -74,10 +76,10 @@ void* Analyzer(void* arg)
     
     while(SIG_FLAG == SIG_NOT_ACTIVE)
     {   
-        QueueBlockingReceive(&cpuTimesQueue, (void*)currentTimesData);
-        if(SIG_FLAG != SIG_NOT_ACTIVE)
+        if(-1 == QueueBlockingReceiveTimeout(&cpuTimesQueue, (void*)currentTimesData, (READER_THREAD_READ_INTERVAL_SEC + 1)))
         {
-            break;
+            LogPrintToFile("FUNC:%s Msg: Timeout expired!\n", __FUNCTION__);
+            continue;
         }
         GetLoadFromEveryCore(&currentTimesData, &previousTimesData, &CoreLoad);
         PushLoadDataToPrinter(CoreLoad);
@@ -119,7 +121,6 @@ void* Watchdog(void* arg)
         WatchdogUpdate();
         if(-1 == WatchdogCheck())
         {
-            printf("Watchdog tirggered!\n");
             LogPrintToFile("FUNC:%s Watchdog timeout!\n", __FUNCTION__);
             sleep(1);
             exit(EXIT_FAILURE);
@@ -137,6 +138,8 @@ void* Watchdog(void* arg)
 void* Logger(void* arg)
 {
     WatchdogRegister();
+
+    // process until all of the other threads are closed to gather as much data as possible
     while(THREADS_TERMINATED_FLAG == 0)
     {
         ProcessLogDataToFile();
@@ -166,11 +169,10 @@ int main()
     /* Clean resources */
     DestroyQueue(&cpuTimesQueue);
     DestroyQueue(&cpuPercentageQueue);
-    Logger_DeInit();
     WatchdogDeinit();
+    Logger_DeInit();
 
     printf("CUT app closed. \n");
-    LogPrintToFile("FUNC:%s MSG: CUT app closed!\n", __FUNCTION__);
     return 0;
 }
 
@@ -179,55 +181,35 @@ void CleanUp_Handler(int signum)
     printf("\nCleaning resources...\n");
     LogPrintToFile("FUNC:%s Msg: Cleaning resources\n", __FUNCTION__);
     SIG_FLAG = signum;
-    sem_post(&cpuTimesQueue->_QueueCntSem);
 }
 
 void CreateThreads(pthread_t* th)
 {
-    for(int t = 0; t < NUMBER_OF_THREADS; t++)
+    if (pthread_create(&th[0], NULL, Reader, NULL) != 0)
     {
-        if(t == 0)
-        {
-            if(pthread_create(&th[t], NULL, Reader, NULL) != 0)
-            {
-                printf("Pthread_create error!\n");
-            }
-        }
+        printf("Pthread_create error!\n");
+    }
 
-        else if(t == 1)
-        {
-            if(pthread_create(&th[t], NULL, Analyzer, NULL) != 0)
-            {
-                printf("Pthread_create error!\n");
-            }
-        }
+    if (pthread_create(&th[1], NULL, Analyzer, NULL) != 0)
+    {
+        printf("Pthread_create error!\n");
+    }
 
-        else if(t == 2)
-        {
-            if(pthread_create(&th[t], NULL, Printer, NULL) != 0)
-            {
-                printf("Pthread_create error!\n");
-            }
-        }
+    if (pthread_create(&th[2], NULL, Printer, NULL) != 0)
+    {
+        printf("Pthread_create error!\n");
+    }
 
-        else if(t == 3)
-        {
-            if(pthread_create(&th[t], NULL, Watchdog, NULL) != 0)
-            {
-                printf("Pthread_create error!\n");
-            }
-        }
+    if (pthread_create(&th[3], NULL, Watchdog, NULL) != 0)
+    {
+        printf("Pthread_create error!\n");
+    }
 
-        else if(t == 4)
-        {
-            if(pthread_create(&th[t], NULL, Logger, NULL) != 0)
-            {
-                printf("Pthread_create error!\n");
-            }
-        }
+    if (pthread_create(&th[4], NULL, Logger, NULL) != 0)
+    {
+        printf("Pthread_create error!\n");
     }
 }
-
 int JoinThreads(pthread_t* th)
 {
     for(int t = 0; t < NUMBER_OF_THREADS; t++)

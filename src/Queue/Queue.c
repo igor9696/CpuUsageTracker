@@ -5,8 +5,7 @@
 #include <string.h>
 #include <semaphore.h>
 
-
-
+#include "../Logger/Logger.h"
 
 size_t GetNumOfItemsInsideQueue(QueueHandle_t** queue)
 {
@@ -16,13 +15,13 @@ size_t GetNumOfItemsInsideQueue(QueueHandle_t** queue)
 QueueHandle_t* CreateQueue(uint8_t QueueLength, size_t size_of_element)
 {
     QueueHandle_t *queue = NULL;
-    queue = malloc(sizeof(QueueHandle_t));
+    queue = calloc(1, sizeof(QueueHandle_t));
     if (queue == NULL)
     {
         return NULL;
     }
 
-    queue->buffer = malloc(size_of_element * QueueLength);
+    queue->buffer = calloc(1, (size_of_element * QueueLength));
     if (queue->buffer == NULL)
     {
         return NULL;
@@ -50,8 +49,6 @@ void DestroyQueue(QueueHandle_t** Queue)
 
     free((*Queue)->buffer);
     free(*Queue);
-
-    (*Queue)->buffer = NULL;
     *Queue = NULL;
 }
 
@@ -85,7 +82,7 @@ void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 {
     if(*queue == NULL)
     {
-        return -1;
+        return;
     }
 
     // wait until something inside queue
@@ -101,6 +98,42 @@ void QueueBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 
     pthread_mutex_unlock(&((*queue)->_QueueMutex));
 }
+
+int QueueBlockingReceiveTimeout(QueueHandle_t** queue, void* ItemFromQueue, size_t timeout_sec)
+{
+    if(*queue == NULL)
+    {
+        LogPrintToFile("FUNC:%s Msg: NULL pointer received!\n", __FUNCTION__);
+        return -1;
+    }
+
+    struct timespec ts = { 0 };
+    if(-1 == clock_gettime(CLOCK_REALTIME, &ts))
+    {
+        LogPrintToFile("FUNC:%s Msg: Error in clock_gettime function!\n", __FUNCTION__);
+        return -1;
+    }
+    ts.tv_sec += timeout_sec;
+
+    // wait timeout_sec untill something appear in queue, if not return
+    if(-1 == sem_timedwait(&((*queue)->_QueueCntSem), &ts))
+    {
+        LogPrintToFile("FUNC:%s Msg: Timeout expired in queue wait\n", __FUNCTION__);
+        return -1;
+    }
+    pthread_mutex_lock(&((*queue)->_QueueMutex));
+
+    char* BufferPtrChar = (char*)(*queue)->buffer;
+    size_t BufferAllocShift = ((*queue)->_free_idx) * ((*queue)->_element_size);
+    memcpy(ItemFromQueue, BufferPtrChar + BufferAllocShift, (*queue)->_element_size);
+    (*queue)->_itemsInQueue--;
+    (*queue)->_free_idx = ((*queue)->_free_idx + 1) % (*queue)->_length;
+
+    pthread_mutex_unlock(&((*queue)->_QueueMutex));
+    return 0;
+}
+
+
 
 int QueueNonBlockingReceive(QueueHandle_t** queue, void* ItemFromQueue)
 {
