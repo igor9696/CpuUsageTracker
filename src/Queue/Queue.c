@@ -5,7 +5,7 @@
 #include <string.h>
 #include <semaphore.h>
 
-#include "../Logger/Logger.h"
+#include "Logger.h"
 
 size_t GetNumOfItemsInsideQueue(QueueHandle_t** queue)
 {

@@ -1,6 +1,7 @@
-#include "Printer.h"
-#include "../Analyzer/Analyzer.h"
 #include <stdio.h>
+
+#include "Printer.h"
+#include "Analyzer.h"
 
 
 void PrintFormattedCoreUsage(const cpuLoad_s* LoadData, const uint8_t NumOfCores)

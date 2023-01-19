@@ -2,9 +2,9 @@
 #include <stdlib.h>
 
 #include "Analyzer.h"
-#include "../Reader/Reader.h"
-#include "../Logger/Logger.h"
-#include "../Queue/Queue.h"
+#include "Reader.h"
+#include "Logger.h"
+#include "Queue.h"
 
 extern uint8_t systemNumberOfCores;
 extern QueueHandle_t* cpuPercentageQueue;
