@@ -1,5 +1,5 @@
 extern "C" {
-#include "Queue/Queue.h"
+#include "Queue.h"
 }
 #include <gtest/gtest.h>
 
