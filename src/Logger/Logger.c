@@ -2,12 +2,12 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "Logger.h"
-#include "../Analyzer/Analyzer.h"
-#include "../Reader/Reader.h"
-#include "../Queue/Queue.h"
-#include "string.h"
+#include "Analyzer.h"
+#include "Reader.h"
+#include "Queue.h"
 
 extern uint8_t systemNumberOfCores;
 static pthread_mutex_t fileMutex;

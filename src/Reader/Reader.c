@@ -3,8 +3,8 @@
 #include <stdlib.h>
 
 #include "Reader.h"
-#include "../Logger/Logger.h"
-#include "../Queue/Queue.h"
+#include "Logger.h"
+#include "Queue.h"
 
 extern uint8_t systemNumberOfCores;
 extern QueueHandle_t* cpuTimesQueue;

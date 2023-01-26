@@ -8,12 +8,12 @@
 #include <string.h>
 #include <signal.h>
 
-#include "Reader/Reader.h"
-#include "Analyzer/Analyzer.h"
-#include "Queue/Queue.h"
-#include "Printer/Printer.h"
-#include "Logger/Logger.h"
-#include "Watchdog/Watchdog.h"
+#include "Reader.h"
+#include "Analyzer.h"
+#include "Queue.h"
+#include "Printer.h"
+#include "Logger.h"
+#include "Watchdog.h"
 
 #define DEBUG 1
 #define QUEUE_SIZE 10

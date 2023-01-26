@@ -7,8 +7,6 @@
 #include "Watchdog.h"
 #include "../Logger/Logger.h"
 
-#define _GNU_SOURCE
-
 typedef struct wdgthread_t
 {
     int _internalCnt;
@@ -35,7 +33,7 @@ int WatchdogInit(const int NumOfThreads)
     Watchdog._head = 0;
     Watchdog._tail = 0;
     Watchdog._registeredThreads = 0;
-    Watchdog.ThreadsArr = malloc(sizeof(wdgthread_t) * NumOfThreads);
+    Watchdog.ThreadsArr = (wdgthread_t*)malloc(sizeof(wdgthread_t) * NumOfThreads);
     if(Watchdog.ThreadsArr == NULL)
     {
         return -1;

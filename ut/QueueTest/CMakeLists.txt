@@ -1,0 +1,6 @@
+set(TEST_NAME QueueTest)
+add_executable(${TEST_NAME} QueueTest.cpp)
+target_include_directories(${TEST_NAME} PUBLIC "../../Logger" "../../Queue")
+target_link_libraries(${TEST_NAME} QUEUE_LIB GTest::gtest_main)
+include(GoogleTest)
+gtest_discover_tests(${TEST_NAME})
